@@ -1,0 +1,36 @@
+false   training
+true   randomize weights
+
+1681   input activations
+100   1st hidden layer activations
+50   2nd hidden layer activations
+3   output activations
+
+1.5   random range upper bound
+-1.5   random range lower bound
+0.3   lambda
+
+10000   maximum iterations
+0.002   mimimum error threshold
+
+images:
+/Users/23amritap/Documents/vsCode/NN_2021/DibDump/croppedPels_150_1_group1.txt
+0.0 0.0 1.0
+
+/Users/23amritap/Documents/vsCode/NN_2021/DibDump/croppedPels_150_2_group2.txt
+0.0 1.0 0.0
+
+/Users/23amritap/Documents/vsCode/NN_2021/DibDump/croppedPels_150_3_group3.txt
+0.0 1.0 1.0
+
+/Users/23amritap/Documents/vsCode/NN_2021/DibDump/croppedPels_150_4_group4.txt
+1.0 0.0 0.0
+
+/Users/23amritap/Documents/vsCode/NN_2021/DibDump/croppedPels_150_5_group5.txt
+1.0 1.0 0.0
+
+training file: 
+controlTrain.txt
+
+testing file:
+trainingWeights_iteration97.txt

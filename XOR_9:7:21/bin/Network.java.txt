@@ -1,0 +1,403 @@
+/** 
+ * A network with two connected layers and only a single output activation 
+ * that attempts to converge on boolean operator datasets.
+ * 
+ * Author: Amrita Pasupathy
+ * Date Created: 9/7/21
+*/
+public class Network
+{
+   int K;
+   int J;
+   int I;
+
+   double[] A, H;
+
+   final int NUM_CASES = 4;
+   final int NUM_CONNECTIVITY_LAYERS = 2;
+   double upperBoundRand, lowerBoundRand;
+   boolean train;
+   double lambda, F0, currError, sumError, minSumError;
+   int iterations, maxIterations;
+
+   /*
+   * To train or run the network with another set of inputs,
+   * change the values in this 2D array
+   */
+   double[][] inputs = {{0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}};
+
+   /*
+   * To train or run the network with another set of outputs, 
+   * add another set of outputs in the form of a 1D array to this 2D array
+   * 
+   */
+   double[][] outputSet= {{0.0, 0.0, 0.0, 1.0}, {0.0, 1.0, 1.0, 1.0}, {0.0, 1.0, 1.0, 0.0}};
+
+   double[] trueOutputs;
+   double[] runOutputs; 
+
+   double[][][] W;
+
+   /*
+   * Although this array is currently initialized to be specific to the the 2-2-1 configuration,
+   * it can be manually changed to match different configurations
+   */
+   double[][][] testWeights = {{{0.4, 0.3}, {0.2, 0.6}}, {{0.4}, {0.5}}};      
+
+   double omega0, psi0;
+   double[] thetaJ, thetaI;
+   double[][] bigOmega, bigPsi;
+   double[][][] partialDerivatives, deltaW;
+
+
+   /**
+    * Constructor for the network
+    * 
+    * @param setNum                    represents which boolean operator dataset to solve
+    * @param isTrain                   whether the network will train or run
+    * @param numHiddenActivations      the number of hidden layer activations
+    * @param upperBound                the upper bound of the random weight range
+    * @param lowerBound                the upper bound of the random weight range
+    * @param lam                       the learning rate (lambda)
+    * @param maxIter                   the maximum number or iterations before the network stops training
+    * @param minErr                    the largest error needed before the network stops training
+    */
+   public Network(int setNum, boolean isTrain, int numHiddenActivations, double upperBound, 
+   double lowerBound, double lam, int maxIter, double minErr)
+   {
+       K = 2;                       // the number of input activations, should not be changed at this stage
+       J = numHiddenActivations;    // the number of hidden layer activations
+       I = 1;                       // the number of output activations, should not be changed at this stage
+
+       A = new double[K];
+       H = new double[J];
+
+       upperBoundRand = upperBound;
+       lowerBoundRand = lowerBound;
+
+       train = isTrain;
+       lambda = lam;
+       minSumError = minErr;
+       maxIterations = maxIter;
+
+       trueOutputs = new double[NUM_CASES];
+       for (int i = 0; i < NUM_CASES; i++)
+       {
+           trueOutputs[i] = outputSet[setNum][i];
+       }
+
+       runOutputs = new double[NUM_CASES];
+
+       bigOmega = new double[J][1];
+       bigPsi = new double[J][1];
+
+       thetaJ = new double[J];
+       thetaI = new double[I];
+
+       W = new double[NUM_CONNECTIVITY_LAYERS][J][J];
+       partialDerivatives = new double[NUM_CONNECTIVITY_LAYERS][J][J];
+       deltaW = new double[NUM_CONNECTIVITY_LAYERS][J][J];
+   }
+
+
+   /**
+    * Checks whether the network is set to train or run 
+    *
+    * @return   true if the network is set to train; otherwise,
+    *           false
+    */
+   public boolean willTrain()
+   {
+       return train;
+   }
+
+
+   /**
+    * Prints a formatted truth table using the values provided 
+    * 
+    * @param firstInput       the first input value of the chosen boolean operator dataset
+    * @param secondInput      the second input value of the chosen boolean operator dataset
+    * @param trueOut          the output value of the chosen boolean operator dataset
+    * @param runOut           the output value calculated by the network
+    */
+   public void printTruthTable(double firstInput, double secondInput, double trueOut, double runOut)
+   {
+       System.out.println("input 1: " + firstInput + "\tinput 2: " + secondInput 
+          + "\ttrue value: " + trueOut + "    run value:" + runOut);
+   }
+
+
+   /**
+    * Runs the network without training using the predetermined test weights
+    */
+   public void runNetwork()
+   {
+       loadTestWeights();
+
+       for (int i = 0; i < NUM_CASES; i++)
+       {
+           A = inputs[i];
+           runOutputs[i] = implementNetwork(A);
+           printTruthTable(A[0], A[1], trueOutputs[i], runOutputs[i]);
+       }
+       System.out.println();
+   }
+
+
+   /**
+    * Trains the network starting with randomized weights until the calculated error 
+    * is lower than the threshold error or the maximum number of iterations is reached
+    */
+   public void trainNetwork()
+   {
+       loadRandomWeights();
+
+       while (iterations == 0 || (sumError > minSumError && iterations < maxIterations))
+       {
+           sumError = 0.0;
+           for (int i = 0; i < NUM_CASES; i++)
+           {
+               A = inputs[i];
+               runOutputs[i] = implementNetwork(A);
+               currError = minimizeError(trueOutputs[i], runOutputs[i]);
+               sumError += (currError * currError);
+               updateWeights();
+           }
+           iterations++;
+           sumError *= 0.5;
+       } // while (iterations == 0 || (sumError > minSumError && iterations < maxIterations))
+
+       printTrainingInfo();
+       for (int i = 0; i < NUM_CASES; i++)
+       {
+           printTruthTable(inputs[i][0], inputs[i][1], trueOutputs[i], runOutputs[i]);
+       }
+       System.out.println(); // prints an empty line for readability reasons
+   }
+
+
+   /**
+    * Prints information about the network after it finishes training
+    */
+   public void printTrainingInfo()
+   {
+       if (iterations == maxIterations)
+       {
+           System.out.println("Stopping Reason: max iterations reached");
+       }
+
+       if (sumError <= minSumError)
+       {
+           System.out.println("Stopping Reason: error is below minimum threshold");
+       }
+
+       System.out.println();
+       System.out.println("Network Configuration:");
+       System.out.println("\tInput Layer Activations: " + K);
+       System.out.println("\t1st Hidden Layer Activations: " + J);
+       System.out.println("\tOutput Layer Activations: " + I);
+       System.out.println();
+
+       System.out.println("Maximum Iterations: " + maxIterations + "\tIterations Taken: " + iterations);
+       System.out.println("Error: " + sumError + "\tMinimum Error Threshold: " + minSumError);
+       System.out.println("Lambda: " + lambda);
+       System.out.println("Random Weight Range: " + lowerBoundRand + " to " + upperBoundRand);
+       System.out.println();
+   }
+
+
+   /**
+    * Calculates a single randomized weight using the upper and lower bounds
+    *
+    * @return   a random value inside the range
+    */
+   public double randomWeight()
+   {
+       return Math.random() * (upperBoundRand - lowerBoundRand) + lowerBoundRand;
+   }
+
+
+   /**
+    * Loads the weights array with random values 
+    */
+   public void loadRandomWeights()
+   {
+       for (int k = 0; k < K; k++)
+       {
+           for (int j = 0; j < J; j++)
+           {
+               W[0][k][j] = randomWeight();
+           }
+       }
+
+       for (int j = 0; j < J; j++)
+       {
+           W[1][j][0]  = randomWeight();
+       }
+   }
+
+
+   /**
+    * Loads the weights array with the predetermined test weights
+    */
+   public void loadTestWeights()
+   {
+       for (int k = 0; k < K; k++)
+       {
+           for (int j = 0; j < J; j++)
+           {
+               W[0][k][j] = testWeights[0][k][j];
+           }
+       }
+
+       for (int j = 0; j < J; j++)
+       {
+           W[1][j][0]  = testWeights[1][j][0];
+       }
+   }
+
+
+   /**
+    * Evaluates the network to calculate the output value
+    *
+    * @param A   an array of activation inputs
+    * @return   the calculated output
+    */
+   public double implementNetwork(double[] A)
+   {
+       for (int k = 0; k < K; k++)
+       {
+           for (int j = 0; j < J; j++)
+           {
+               thetaJ[j] += W[0][k][j] * A[k];
+           }
+       }
+
+       for (int j = 0; j < J; j++)
+       {
+           H[j] = sigmoid(thetaJ[j]);
+           thetaI[0] += W[1][j][0] * H[j];
+       }
+       F0 = sigmoid(thetaI[0]);
+       return F0;
+   }
+
+
+   /**
+    * Applies the sigmoid function to a value
+    *
+    * @param theta   the inputted value on which to apply the function
+    * @return  the output of the sigmoid function
+    */
+   public double sigmoid(double theta)
+   {
+       return 1.0/(1.0 + Math.exp(-theta));
+   }
+
+
+   /**
+    * Applies the derivative of the sigmoid function to a value
+    *
+    * @param theta   the inputted value on which to apply the function
+    * @return  the output of the derivative of the sigmoid function
+    */
+   public double sigmoidDerivative(double theta)
+   {
+       double sigmoidTheta = sigmoid(theta);
+       return sigmoidTheta * (1.0 - sigmoidTheta);
+   }
+
+
+   /**
+    * Uses the network's output value to calculate the change in error using gradient descent
+    * 
+    * @param T0   the output value of the chosen boolean operator dataset
+    * @param F0   the output value calculated by the network
+    * @return   the error between the true and calculated outputs for this case 
+    */
+   public double minimizeError(double T0, double F0)
+   {
+       omega0 = T0 - F0;
+       psi0 = omega0 * sigmoidDerivative(F0);
+       for (int j = 0; j < J; j++)
+       {
+           partialDerivatives[1][j][0] = -H[j] * psi0;
+           deltaW[1][j][0] = -lambda * partialDerivatives[1][j][0];
+       }
+        
+       for (int k = 0; k < K; k++)
+       {
+           for (int j = 0; j < J; j++)
+           {
+               bigOmega[j][0] = psi0 * W[1][j][0];
+               bigPsi[j][0] = bigOmega[j][0] * sigmoidDerivative(thetaJ[j]);
+
+               partialDerivatives[0][k][j] = -A[k] * bigPsi[j][0];
+               deltaW[0][k][j] = -lambda * partialDerivatives[0][k][j];
+           }
+       }
+       return omega0;
+   }
+
+
+   /**
+    * Applies the calculated change in weights to the weights themselves
+    */
+   public void updateWeights()
+   {
+       for (int j = 0; j < J; j++)
+       {
+          for (int k = 0; k < K; k++)
+           {
+               W[0][k][j] += deltaW[0][k][j];
+           }
+           thetaJ[j] = 0.0;
+       }
+
+       for (int j = 0; j < J; j++)
+       {
+           W[1][j][0] += deltaW[1][j][0];
+       }
+
+       thetaI[0] = 0.0;
+   }
+
+
+   /**
+    * Creates a network and either runs or trains it
+    * 
+    * @param args   the input array of information from the command line
+    */
+   public static void main(String[] args)
+   {
+       Network network = new Network(2, true, 5, 1.5, 0.1, 0.3, 100000, 0.005);
+       /*
+       * Constructor for the Network class:
+       *    Network.Network(int setNum, boolean isTrain, int numHiddenActivations, double upperBound, 
+       *    double lowerBound, double lam, int maxIter, double minErr)
+       * 
+       * @param setNum                    represents which boolean operator dataset to solve
+       *    to train or run the network with another set of inputs and outputs 
+       *    that don't necessarily have to be boolean operators,
+       *    make changes to the instance variable declarations at the top of the class
+       *    and then change this parameter to match the index of the new set of outputs
+       * @param isTrain                   whether the network will train or run
+       * @param numHiddenActivations      the number of hidden layer activations
+       * @param upperBound                the upper bound of the random weight range
+       * @param lowerBound                the upper bound of the random weight range
+       * @param lam                       the learning rate (lambda)
+       * @param maxIter                   the maximum number or iterations before the network stops training
+       * @param minErr                    the largest error needed before the network stops training
+       * 
+       */
+
+       if (network.willTrain())
+       {
+           network.trainNetwork();
+       }
+       else
+       {
+           network.runNetwork();
+       }
+   }
+}

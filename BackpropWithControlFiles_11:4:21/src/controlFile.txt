@@ -1,0 +1,31 @@
+false   training
+false  randomize weights
+
+2   input activations
+5   1st hidden layer activations
+3   output activations
+
+1.5   random range upper bound
+0.1   random range lower bound
+0.3   lambda
+
+10000   maximum iterations
+0.001   mimimum error threshold
+
+0.0 0.0
+0.0 0.0 0.0
+
+1.0 0.0
+0.0 1.0 1.0
+
+0.0 1.0
+0.0 1.0 1.0
+
+1.0 1.0
+1.0 1.0 0.0
+
+training file: 
+controlTrain.txt
+
+testing file:
+controlTest.txt
